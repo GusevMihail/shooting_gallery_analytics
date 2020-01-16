@@ -25,7 +25,7 @@ def str_to_num(field: str):
     if field == '' or field is None:
         return 0
     else:
-        return int(field)
+        return int(float(field))
 
 
 def categorical_to_num(field: str):
@@ -67,12 +67,44 @@ def process_line(line):
         process_fields(line['evening'])
 
 
+class UserDict:
+    def __init__(self):
+        self.name_dict = {}
+        self.id_dict = {}
+
+    def name_to_id(self, user_name: str):
+        if user_name in self.name_dict:
+            return self.name_dict[user_name]
+        else:
+            new_id = len(self.name_dict)
+            self.name_dict[user_name] = new_id
+            self.id_dict[new_id] = user_name
+            return new_id
+
+    def id_to_name(self, user_id: int):
+        return self.id_dict[user_id]
+
+
 filename = "data_file.json"
 with open(filename, encoding='utf-8') as data_file:
     data = json.load(data_file)
     # print(data)
 
+users = UserDict()
+
 for line in data:
     process_line(line)
+
+# UserDict test
+ids = []
+for line in data[:10]:
+    user_name = line['morning']['user']
+    user_id = users.name_to_id(user_name)
+    ids.append(user_id)
+    print(f"{user_name:20} -> {user_id}")
+
+for user_id in ids:
+    user_name = users.id_to_name(user_id)
+    print(f"{user_id:3} -> {user_name}")
 
 df = pd.read_json(filename, encoding='utf-8')
