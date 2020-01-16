@@ -1,6 +1,6 @@
-import json, io
+import json
 import pandas as pd
-
+from collections import defaultdict
 
 def is_numeric_field(field_name: str):
     int_factor_names = ('cash', 'toys', 'mood', 'power_reserve', 'plan',
@@ -58,13 +58,18 @@ def process_fields(line):
 
 
 def process_line(line):
-    if line['morning'] == {} or line['evening'] == {}:
-        return 'Not morning or evening values'
+    if line['morning'] == {}:
+        return 'Not morning or evening values', line['evening']['user'][0]
+    if line['evening'] == {}:
+        return 'Not morning or evening values', line['morning']['user'][0]
     if not isinstance(line['morning']['date_time_str'], str):
-        if len(line['morning']['date_time_str']) != 1 or len(line['evening']['date_time_str']) != 1:
-            return "Values is't correct"
-        process_fields(line['morning'])
-        process_fields(line['evening'])
+        if len(line['morning']['date_time_str']) != 1:
+            return "Values is't correct", line['morning']['user']
+        if len(line['evening']['date_time_str']) != 1:
+            return "Values is't correct", line['evening']['user']
+    process_fields(line['morning'])
+    process_fields(line['evening'])
+    return None, line['morning']['user']
 
 
 class UserDict:
@@ -85,26 +90,59 @@ class UserDict:
         return self.id_dict[user_id]
 
 
+def sorted_dict(d: dict):
+    s = sorted(d.items(), key=lambda x: x[1], reverse=True)
+    return s
+
+
 filename = "data_file.json"
+# filename = "test_file.json"
 with open(filename, encoding='utf-8') as data_file:
-    data = json.load(data_file)
+    raw_data = json.load(data_file)
     # print(data)
 
+data = []
 users = UserDict()
+er_no_one_r, er_duplicated_r = 0, 0
+no_one_repord_users = defaultdict(int)
+dublicated_repord_users = defaultdict(int)
+for i, line in enumerate(raw_data):
+    error, responsible_user = process_line(line)
+    if error:
+        # print(f'line{i}: {error}')  # print all errors
+        if 'morning' in error:
+            er_no_one_r += 1
+            no_one_repord_users[responsible_user] += 1
+        if "is't correct" in error:
+            er_duplicated_r += 1
+            for u in responsible_user:
+                dublicated_repord_users[u] += 1
 
-for line in data:
-    process_line(line)
+
+    else:
+        data.append(line)
+if __name__ == '__main__':
+    print(f'no morning or evening lines: {er_no_one_r}')
+    print(sorted_dict(no_one_repord_users))
+    print(f'incorrect value lines: {er_duplicated_r}')
+    print(sorted_dict(dublicated_repord_users))
+
+
+def test_user_dict_class():
+    ids = []
+    for line in data[:10]:
+        user_name = line['morning']['user']
+        user_id = users.name_to_id(user_name)
+        ids.append(user_id)
+        print(f"{user_name:20} -> {user_id}")
+
+    for user_id in ids:
+        user_name = users.id_to_name(user_id)
+        print(f"{user_id:3} -> {user_name}")
+
 
 # UserDict test
-ids = []
-for line in data[:10]:
-    user_name = line['morning']['user']
-    user_id = users.name_to_id(user_name)
-    ids.append(user_id)
-    print(f"{user_name:20} -> {user_id}")
+# test_user_dict_class()
 
-for user_id in ids:
-    user_name = users.id_to_name(user_id)
-    print(f"{user_id:3} -> {user_name}")
-
-df = pd.read_json(filename, encoding='utf-8')
+# df = pd.read_json(filename, encoding='utf-8')
+df = pd.DataFrame(data)
