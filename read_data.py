@@ -2,6 +2,7 @@ import json
 import pandas as pd
 from collections import defaultdict
 
+
 def is_numeric_field(field_name: str):
     int_factor_names = ('cash', 'toys', 'mood', 'power_reserve', 'plan',
                         'exchange', 'collection', 'prepayment', 'balance', 'are_you_good', 'good_day')
@@ -117,10 +118,9 @@ for i, line in enumerate(raw_data):
             er_duplicated_r += 1
             for u in responsible_user:
                 dublicated_repord_users[u] += 1
-
-
     else:
         data.append(line)
+
 if __name__ == '__main__':
     print(f'no morning or evening lines: {er_no_one_r}')
     print(sorted_dict(no_one_repord_users))
