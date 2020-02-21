@@ -141,8 +141,56 @@ def test_user_dict_class():
         print(f"{user_id:3} -> {user_name}")
 
 
+def data_cleanup(df):
+    # убираем сложные поля утреннего и вечернего отчета, переименовываем вложенные поля,
+    # добиваемся плоской структуры данных
+    dfm = df['morning'].apply(pd.Series)
+    dfe = df['evening'].apply(pd.Series)
+    dfm.columns = 'm_' + dfm.columns
+    dfe.columns = 'e_' + dfe.columns
+    df = pd.concat([df.drop(['morning', 'evening'], axis=1), dfm, dfe], axis=1)
+
+    df = df.dropna()  # выкидываем строки, содержащие пропуски в данных
+
+    # Приводим имена опреаторов в единому формату
+    df.m_user = df.m_user.str.strip().str.title()
+
+    # добавляем дополнительные столбцы с необходимыми данными
+    df['income'] = df['e_cash'] + df['e_cashless']
+    df['date'] = pd.to_datetime(df.year * 10000 + df.month * 100 + df.day, format='%Y%m%d')
+    # from datetime import datetime
+    df['week_day'] = df['date'].apply(lambda x: x.weekday())
+
+    # конвертируем нужные колонки в категории
+    df.store = pd.Categorical(df.store)
+    df.m_user = pd.Categorical(df.m_user)
+
+    df = df.set_index(['date'])
+
+    columns_to_research = ('income', 'day', 'month', 'year', 'week_day', 'store', 'm_user',
+                           'm_small_toys', 'm_medium_toys', 'm_big_toys', 'm_bolls', 'm_pellet', 'm_candis',
+                           'm_mood', 'm_power_reserve', 'm_plan')
+
+    # оставляем только нужные колонки
+    df = df.reindex(columns=columns_to_research)
+
+    return df
+
+
+def filter_rare_users(df, min_sample_count=10):
+    df['sample_count'] =
+    return df
+
+
 # UserDict test
 # test_user_dict_class()
 
 # df = pd.read_json(filename, encoding='utf-8')
 df = pd.DataFrame(data)
+df = data_cleanup(df)
+
+all_users_df = df.copy()
+
+df = filter_rare_users(df)
+
+# убираем сложные поля утреннего и вечернего отчета, переименовываем вложенные поля, добиваемся плоской структуры данных
