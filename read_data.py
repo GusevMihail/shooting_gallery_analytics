@@ -177,20 +177,59 @@ def data_cleanup(df):
     return df
 
 
-def filter_rare_users(df, min_sample_count=10):
-    df['sample_count'] =
+def filter_rare_values(df, column: str, min_sample_count=10):
+    sample_count = df.groupby([column]).income.count()
+    df = df.reset_index().set_index([column])
+    df = df.drop(sample_count[sample_count < min_sample_count].index)
+    df = df.reset_index().set_index('date')
+    df[column].cat.remove_unused_categories(inplace=True)
+
     return df
+
+
+def build_users_rating(df):
+    # by_store_normalization = (df.groupby(['store', 'm_user'])['income'].median() /
+    #                           df.groupby(['store']).income.median()) \
+    #     .reset_index().groupby(['m_user']).income.median()
+    #
+    # by_week_day_normalization = (df.groupby(['week_day', 'm_user'])['income'].median() /
+    #                             df.groupby(['week_day']).income.median()) \
+    #     .reset_index().groupby(['m_user']).income.median()
+
+    by_store_week_day_normalization = (df.groupby(['week_day', 'store', 'm_user']).income.median() /
+                                       df.groupby(['week_day', 'store']).income.median()) \
+        .reset_index().groupby(['m_user']).income.median()
+
+    by_month_normalization = (df.groupby(['month', 'm_user'])['income'].median() /
+                              df.groupby(['month']).income.median()) \
+        .reset_index().groupby(['m_user']).income.median()
+
+    users_rating = pd.DataFrame()
+    # users_rating['rating'] = (by_store_normalization + by_week_day_normalization + by_month_normalization) / 3
+    users_rating['rating'] = by_store_week_day_normalization * by_month_normalization
+    users_rating.sort_values(by='rating', ascending=False, inplace=True)
+
+    # users_rating = (df.groupby(['store', 'm_user'])['income'].mean() /
+    #                 df.groupby(['store']).income.mean())
+    #
+    # users_rating = users_rating.reset_index().groupby(['m_user']).mean().sort_values(by='income', ascending=False)
+    # users_rating.columns = ['rating']
+    return users_rating
 
 
 # UserDict test
 # test_user_dict_class()
 
 # df = pd.read_json(filename, encoding='utf-8')
+# читаем данные
 df = pd.DataFrame(data)
+# проводим первичную очистку
 df = data_cleanup(df)
-
-all_users_df = df.copy()
-
-df = filter_rare_users(df)
+# бэкапим датасет со всеми работниками, основной очищаем от работников, про которых слишком мало информации
+df_with_rares = df.copy()
+df = filter_rare_values(df, 'm_user', min_sample_count=10)
+df = filter_rare_values(df, 'store', min_sample_count=30)
+# строим таблицу рейтинга эффективности работников
+users_rating = build_users_rating(df)
 
 # убираем сложные поля утреннего и вечернего отчета, переименовываем вложенные поля, добиваемся плоской структуры данных
