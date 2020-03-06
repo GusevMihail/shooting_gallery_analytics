@@ -96,64 +96,117 @@ def sorted_dict(d: dict):
     return s
 
 
-filename = "data_file.json"
-# filename = "test_file.json"
-with open(filename, encoding='utf-8') as data_file:
-    raw_data = json.load(data_file)
-    # print(data)
+def read_data_from_json(filename):
+    # filename = "test_file.json"
+    with open(filename, encoding='utf-8') as data_file:
+        raw_data = json.load(data_file)
+        # print(data)
 
-data = []
-users = UserDict()
-er_no_one_r, er_duplicated_r = 0, 0
-no_one_repord_users = defaultdict(int)
-dublicated_repord_users = defaultdict(int)
-for i, line in enumerate(raw_data):
-    error, responsible_user = process_line(line)
-    if error:
-        # print(f'line{i}: {error}')  # print all errors
-        if 'morning' in error:
-            er_no_one_r += 1
-            no_one_repord_users[responsible_user] += 1
-        if "is't correct" in error:
-            er_duplicated_r += 1
-            for u in responsible_user:
-                dublicated_repord_users[u] += 1
-    else:
-        data.append(line)
-
-if __name__ == '__main__':
-    print(f'no morning or evening lines: {er_no_one_r}')
-    print(sorted_dict(no_one_repord_users))
-    print(f'incorrect value lines: {er_duplicated_r}')
-    print(sorted_dict(dublicated_repord_users))
+    data = []
+    users = UserDict()
+    er_no_one_r, er_duplicated_r = 0, 0
+    no_one_repord_users = defaultdict(int)
+    dublicated_repord_users = defaultdict(int)
+    for i, line in enumerate(raw_data):
+        error, responsible_user = process_line(line)
+        if error:
+            # print(f'line{i}: {error}')  # print all errors
+            if 'morning' in error:
+                er_no_one_r += 1
+                no_one_repord_users[responsible_user] += 1
+            if "is't correct" in error:
+                er_duplicated_r += 1
+                for u in responsible_user:
+                    dublicated_repord_users[u] += 1
+        else:
+            data.append(line)
+    return data
 
 
-def test_user_dict_class():
-    ids = []
-    for line in data[:10]:
-        user_name = line['morning']['user']
-        user_id = users.name_to_id(user_name)
-        ids.append(user_id)
-        print(f"{user_name:20} -> {user_id}")
+def read_data_from_csv(f_morning, f_evening):
+    morning = pd.read_csv(f_morning, parse_dates=[0],
+                          usecols=['Отметка времени', 'Тир', 'Оператор', 'Количество маленьких игрушек.',
+                                   'Количество средних игрушек.', 'Количество больших игрушек.', 'Как настроение?'])
+    names = dict(zip(morning.columns.values,
+                     ['date', 'store', 'user', 'small_toys', 'medium_toys', 'big_toys', 'mood']))
+    morning.rename(columns=names, inplace=True)
 
-    for user_id in ids:
-        user_name = users.id_to_name(user_id)
-        print(f"{user_id:3} -> {user_name}")
+    evening = pd.read_csv(f_evening, parse_dates=[0],
+                          usecols=['Отметка времени', 'Тир', 'Наличные.', 'Безнал'])
+    names = dict(zip(evening.columns.values,
+                     ['date', 'store', 'e_cash', 'e_cashless']))
+    evening.rename(columns=names, inplace=True)
+
+    return morning
 
 
-def data_cleanup(df):
+def csv_data_cleanup(df):
+    df = df.dropna()  # выкидываем строки, содержащие пропуски в данных
+
+    # Приводим имена опреаторов в единому формату
+    df.user = df.user.str.strip().str.title()
+
+    # добавляем дополнительные столбцы с необходимыми данными
+    df['income'] = df['e_cash'] + df['e_cashless']
+    # df['date'] = pd.to_datetime(df.year * 10000 + df.month * 100 + df.day, format='%Y%m%d')
+    df['day'] = df['date'].day
+    df['month'] = df['date'].month
+    df['year'] = df['date'].year
+    # from datetime import datetime
+    df['week_day'] = df['date'].apply(lambda x: x.weekday())
+
+    # конвертируем нужные колонки в категории
+    df.store = pd.Categorical(df.store)
+    df.user = pd.Categorical(df.user)
+
+    df = df.set_index(['date'])
+
+    columns_to_research = ('income', 'day', 'month', 'year', 'week_day', 'store', 'user',
+                           'small_toys', 'medium_toys', 'big_toys', 'mood',)
+
+    # оставляем только нужные колонки
+    df = df.reindex(columns=columns_to_research)
+
+    # добавляем дополнительные признаки
+    df['toys_volume'] = df['small_toys'] + df['medium_toys'] * 2 + df['big_toys'] * 5
+
+    return df
+
+
+# if __name__ == '__main__':
+# print(f'no morning or evening lines: {er_no_one_r}')
+# print(sorted_dict(no_one_repord_users))
+# print(f'incorrect value lines: {er_duplicated_r}')
+# print(sorted_dict(dublicated_repord_users))
+
+
+# def test_user_dict_class():
+#     ids = []
+#     for line in data[:10]:
+#         user_name = line['morning']['user']
+#         user_id = users.name_to_id(user_name)
+#         ids.append(user_id)
+#         print(f"{user_name:20} -> {user_id}")
+#
+#     for user_id in ids:
+#         user_name = users.id_to_name(user_id)
+#         print(f"{user_id:3} -> {user_name}")
+
+
+def json_data_cleanup(df):
     # убираем сложные поля утреннего и вечернего отчета, переименовываем вложенные поля,
     # добиваемся плоской структуры данных
     dfm = df['morning'].apply(pd.Series)
     dfe = df['evening'].apply(pd.Series)
-    dfm.columns = 'm_' + dfm.columns
+    # оставляем поля из утреннего отчёта без префиксов, чтобы сократить названия полей конечного датасета
+    # dfm.columns = 'm_' + dfm.columns 
     dfe.columns = 'e_' + dfe.columns
     df = pd.concat([df.drop(['morning', 'evening'], axis=1), dfm, dfe], axis=1)
 
     df = df.dropna()  # выкидываем строки, содержащие пропуски в данных
 
     # Приводим имена опреаторов в единому формату
-    df.m_user = df.m_user.str.strip().str.title()
+    df.user = df.user.str.strip().str.title()
 
     # добавляем дополнительные столбцы с необходимыми данными
     df['income'] = df['e_cash'] + df['e_cashless']
@@ -163,16 +216,19 @@ def data_cleanup(df):
 
     # конвертируем нужные колонки в категории
     df.store = pd.Categorical(df.store)
-    df.m_user = pd.Categorical(df.m_user)
+    df.user = pd.Categorical(df.user)
 
     df = df.set_index(['date'])
 
-    columns_to_research = ('income', 'day', 'month', 'year', 'week_day', 'store', 'm_user',
-                           'm_small_toys', 'm_medium_toys', 'm_big_toys', 'm_bolls', 'm_pellet', 'm_candis',
-                           'm_mood', 'm_power_reserve', 'm_plan')
+    columns_to_research = ('income', 'day', 'month', 'year', 'week_day', 'store', 'user',
+                           'small_toys', 'medium_toys', 'big_toys', 'bolls', 'pellet', 'candis',
+                           'mood', 'power_reserve', 'plan')
 
     # оставляем только нужные колонки
     df = df.reindex(columns=columns_to_research)
+
+    # добавляем дополнительные признаки
+    df['toys_volume'] = df['small_toys'] + df['medium_toys'] * 2 + df['big_toys'] * 5
 
     return df
 
@@ -188,48 +244,53 @@ def filter_rare_values(df, column: str, min_sample_count=10):
 
 
 def build_users_rating(df):
-    # by_store_normalization = (df.groupby(['store', 'm_user'])['income'].median() /
+    # by_store_normalization = (df.groupby(['store', 'user'])['income'].median() /
     #                           df.groupby(['store']).income.median()) \
-    #     .reset_index().groupby(['m_user']).income.median()
+    #     .reset_index().groupby(['user']).income.median()
     #
-    # by_week_day_normalization = (df.groupby(['week_day', 'm_user'])['income'].median() /
+    # by_week_day_normalization = (df.groupby(['week_day', 'user'])['income'].median() /
     #                             df.groupby(['week_day']).income.median()) \
-    #     .reset_index().groupby(['m_user']).income.median()
+    #     .reset_index().groupby(['user']).income.median()
 
-    by_store_week_day_normalization = (df.groupby(['week_day', 'store', 'm_user']).income.median() /
+    by_store_week_day_normalization = (df.groupby(['week_day', 'store', 'user']).income.median() /
                                        df.groupby(['week_day', 'store']).income.median()) \
-        .reset_index().groupby(['m_user']).income.median()
+        .reset_index().groupby(['user']).income.median()
 
-    by_month_normalization = (df.groupby(['month', 'm_user'])['income'].median() /
+    by_month_normalization = (df.groupby(['month', 'user'])['income'].median() /
                               df.groupby(['month']).income.median()) \
-        .reset_index().groupby(['m_user']).income.median()
+        .reset_index().groupby(['user']).income.median()
 
     users_rating = pd.DataFrame()
     # users_rating['rating'] = (by_store_normalization + by_week_day_normalization + by_month_normalization) / 3
     users_rating['rating'] = by_store_week_day_normalization * by_month_normalization
     users_rating.sort_values(by='rating', ascending=False, inplace=True)
 
-    # users_rating = (df.groupby(['store', 'm_user'])['income'].mean() /
+    # users_rating = (df.groupby(['store', 'user'])['income'].mean() /
     #                 df.groupby(['store']).income.mean())
     #
-    # users_rating = users_rating.reset_index().groupby(['m_user']).mean().sort_values(by='income', ascending=False)
+    # users_rating = users_rating.reset_index().groupby(['user']).mean().sort_values(by='income', ascending=False)
     # users_rating.columns = ['rating']
     return users_rating
 
 
-# UserDict test
-# test_user_dict_class()
+source = 'json'  # 'json' or 'csv'
 
-# df = pd.read_json(filename, encoding='utf-8')
-# читаем данные
-df = pd.DataFrame(data)
-# проводим первичную очистку
-df = data_cleanup(df)
-# бэкапим датасет со всеми работниками, основной очищаем от работников, про которых слишком мало информации
+# читаем данные и проводим первичную очистку
+if source == 'json':
+    data = read_data_from_json('data_file.json')
+    df = pd.DataFrame(data)
+    df = json_data_cleanup(df)
+elif source == 'csv':
+    df = read_data_from_csv(r'.\data\morning.csv', r'.\data\evening.csv')
+    df = csv_data_cleanup(df)
+else:
+    df = None
+    raise Exception(f'invalid data source: {source}. Must be "json" or "csv"')
+
+# бэкапим датасет со всеми данными;
+# основной очищаем от работников и тиров, про которых слишком мало информации
 df_with_rares = df.copy()
-df = filter_rare_values(df, 'm_user', min_sample_count=10)
+df = filter_rare_values(df, 'user', min_sample_count=10)
 df = filter_rare_values(df, 'store', min_sample_count=30)
 # строим таблицу рейтинга эффективности работников
 users_rating = build_users_rating(df)
-
-# убираем сложные поля утреннего и вечернего отчета, переименовываем вложенные поля, добиваемся плоской структуры данных
